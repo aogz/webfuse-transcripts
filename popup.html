@@ -1,24 +1,12 @@
 <script>
     // Configuration variables
     const CONFIG = {
-        serverUrl: 'https://comeagain.aogz.me/transcription',
         name: 'User', // Default user name
-        sessionID: extractSessionId(window.location.href), // Updated to use extracted session ID
         clientIndex: 0, // Counter for transcript ordering
     };
 
     // State variables
     let recognition;
-
-    // Add this function to extract session ID from URL
-    function extractSessionId(url) {
-        const match = url.match(/\/([^\/]+)\/extensions\//);
-        if (match && match[1]) {
-            return match[1];
-        }
-        return Date.now().toString(); // Fallback to timestamp if no match
-    }
-
     function initSpeechRecognition() {
         recognition = new webkitSpeechRecognition() || new SpeechRecognition();
         recognition.continuous = true;
@@ -48,7 +36,6 @@
                 }
 
                 const payload = {
-                    session_id: CONFIG.sessionID,
                     start_time: startTime,
                     end_time: Date.now().toString(),
                     client_index: CONFIG.clientIndex,
@@ -56,14 +43,6 @@
                     text: transcript
                 }
 
-                // Send the transcript to the server
-                fetch(CONFIG.serverUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(payload)
-                }).catch(error => console.error('Error sending transcript:', error));
                 chrome.virtualSession.apiRequest({cmd: 'log', msg: {...payload, type: 'transcript'}})
                 lastText = '';
             } else {
@@ -76,8 +55,6 @@
 
         recognition.onend = () => {
             isListening = false;
-            console.log('Speech recognition ended');
-            // Automatically restart recognition
             console.log('Restarting speech recognition');
             setTimeout(() => {
                 recognition.start();
