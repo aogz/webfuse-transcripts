@@ -1,0 +1,138 @@
+<script>
+    // Configuration variables
+    const CONFIG = {
+        serverUrl: 'https://comeagain.aogz.me/transcription',
+        name: 'User', // Default user name
+        sessionID: extractSessionId(window.location.href), // Updated to use extracted session ID
+        clientIndex: 0, // Counter for transcript ordering
+    };
+
+    // State variables
+    let recognition;
+
+    // Add this function to extract session ID from URL
+    function extractSessionId(url) {
+        const match = url.match(/\/([^\/]+)\/extensions\//);
+        if (match && match[1]) {
+            return match[1];
+        }
+        return Date.now().toString(); // Fallback to timestamp if no match
+    }
+
+    function initSpeechRecognition() {
+        recognition = new webkitSpeechRecognition() || new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        
+        let lastText = '';
+        let startTime = '';
+        
+        recognition.onstart = () => {
+            console.log('Speech recognition started');
+        };
+
+        recognition.onresult = (event) => {
+            const current = event.resultIndex;
+            const transcript = event.results[current][0].transcript.trim();
+            
+            // Display interim results
+            document.getElementById('interimResults').textContent = transcript;
+            
+            if (event.results[current].isFinal) {
+                // Clear interim display when result is final
+                document.getElementById('interimResults').textContent = '';
+
+                if (transcript.length === 0) {
+                    console.log("Empty transcript");
+                    return;
+                }
+
+                const payload = {
+                    session_id: CONFIG.sessionID,
+                    start_time: startTime,
+                    end_time: Date.now().toString(),
+                    client_index: CONFIG.clientIndex,
+                    name: CONFIG.name,
+                    text: transcript
+                }
+
+                // Send the transcript to the server
+                fetch(CONFIG.serverUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                }).catch(error => console.error('Error sending transcript:', error));
+                chrome.virtualSession.apiRequest({cmd: 'log', msg: {...payload, type: 'transcript'}})
+                lastText = '';
+            } else {
+                if (!lastText) {
+                    startTime = Date.now().toString();
+                }
+                lastText = transcript;
+            }
+        };
+
+        recognition.onend = () => {
+            isListening = false;
+            console.log('Speech recognition ended');
+            // Automatically restart recognition
+            console.log('Restarting speech recognition');
+            setTimeout(() => {
+                recognition.start();
+            }, 2000);
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            console.log('Restarting speech recognition');
+            setTimeout(() => {
+                recognition.start();
+            }, 2000);
+        };
+    }
+
+    // Initialize speech recognition when the page loads
+    document.addEventListener('DOMContentLoaded', () => {        
+        // Add a button to start/stop recognition
+        const toggleButton = document.createElement('button');
+        toggleButton.textContent = 'Start Listening';
+        toggleButton.style.visibility = 'hidden';
+        document.body.appendChild(toggleButton);
+
+        // Add a div to display interim results
+        const interimDiv = document.createElement('div');
+        interimDiv.id = 'interimResults';
+        interimDiv.style.marginTop = '10px';
+        document.body.appendChild(interimDiv);
+
+        function startListening() {
+            if (recognition && !recognition.listening) {
+                recognition.start();
+            }
+        }
+
+        toggleButton.addEventListener('click', () => {
+            startListening();
+        });
+
+        function init() {
+            let handlerAdded = false;
+            chrome.virtualSession.onMessage.addListener(message => {
+                if (message?.msg === 'get_session_participants' && !handlerAdded) {
+                    const me = message.participants.find(participant => !!participant.self);
+                    handlerAdded = true;
+                    CONFIG.clientIndex = me.client_index;
+                    CONFIG.name = me.name;
+                    initSpeechRecognition();
+                    startListening();
+                }
+            })
+
+            chrome.virtualSession.apiRequest({cmd: 'get_session_participants'})
+        }
+
+        setTimeout(init, 1000)
+    });
+</script>
