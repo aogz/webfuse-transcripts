@@ -1,11 +1,10 @@
 {
     "manifest_version": 3,
     "name": "Transcription",
+    "description": "A webfuse extension for transcribing audio.",
+    "homepage_url": "https://github.com/aogz/wbefuse-transcripts",
     "version": "1.0",
     "action": {
         "default_popup": "popup.html"
-    },
-    "host_permissions": [
-        "https://comeagain.aogz.me/*"
-    ]
+    }
 }
